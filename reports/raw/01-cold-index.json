@@ -1,0 +1,79 @@
+{
+  "meta": {
+    "repo": "exp-embeddings-browser-throughput",
+    "commit": "c4319b0",
+    "timestamp": "2026-04-22T06:13:00.084Z",
+    "owner": "ai-webgpu-lab",
+    "track": "ml",
+    "scenario": "synthetic-embeddings-cold",
+    "notes": "synthetic fixture; batchSize=3; docs=6; queries=3; cacheState=cold; automation=playwright-chromium",
+    "capture_context": {
+      "tool": "playwright-chromium",
+      "browser_name": "Chromium",
+      "browser_version": "147.0.7727.15",
+      "headless": true,
+      "captured_at": "2026-04-22T06:13:00.212Z",
+      "captured_by": "zzragida"
+    }
+  },
+  "environment": {
+    "browser": {
+      "name": "Chrome",
+      "version": "147.0.7727.15"
+    },
+    "os": {
+      "name": "Linux",
+      "version": "unknown"
+    },
+    "device": {
+      "name": "Linux x86_64",
+      "class": "desktop-high",
+      "cpu": "16 threads",
+      "memory_gb": 16,
+      "power_mode": "unknown"
+    },
+    "gpu": {
+      "adapter": "not-applicable",
+      "required_features": [],
+      "limits": {}
+    },
+    "backend": "mixed",
+    "fallback_triggered": false,
+    "worker_mode": "main",
+    "cache_state": "cold"
+  },
+  "workload": {
+    "kind": "embeddings",
+    "name": "synthetic-embedding-throughput",
+    "input_profile": "6-docs-3-queries",
+    "model_id": "synthetic-browser-embedder-v1",
+    "dataset": "docs-fixture-v1"
+  },
+  "metrics": {
+    "common": {
+      "time_to_interactive_ms": 96.4,
+      "init_ms": 8.9,
+      "success_rate": 1,
+      "peak_memory_note": "16 GB reported by browser",
+      "error_type": ""
+    },
+    "embeddings": {
+      "docs_per_sec": 674.16,
+      "queries_per_sec": 3000,
+      "p50_ms": 0.1,
+      "p95_ms": 0.3,
+      "recall_at_10": 1,
+      "index_build_ms": 8.9
+    }
+  },
+  "status": "success",
+  "artifacts": {
+    "raw_logs": [
+      "./reports/logs/01-cold-index.log"
+    ],
+    "deploy_url": "https://ai-webgpu-lab.github.io/exp-embeddings-browser-throughput/",
+    "screenshots": [
+      "./reports/screenshots/01-cold-index.png"
+    ]
+  }
+}
