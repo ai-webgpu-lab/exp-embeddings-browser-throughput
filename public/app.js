@@ -1,129 +1,76 @@
-const metadata = Object.freeze({
-  repo: "exp-embeddings-browser-throughput",
-  category: "ml",
-  purpose: "임베딩 처리량",
-  priority: "P0",
-  trackLabel: "ML",
-  kindLabel: "experiment",
-  trackSlug: "ml",
-  workloadKind: "embeddings",
-  pagesUrl: "https://ai-webgpu-lab.github.io/exp-embeddings-browser-throughput/",
-  repoUrl: "https://github.com/ai-webgpu-lab/exp-embeddings-browser-throughput",
-  readmeUrl: "https://github.com/ai-webgpu-lab/exp-embeddings-browser-throughput/blob/main/README.md",
-  resultsUrl: "https://github.com/ai-webgpu-lab/exp-embeddings-browser-throughput/blob/main/RESULTS.md"
-});
+const CACHE_KEY = "ai-webgpu-lab:embeddings-index:v1";
 
 const state = {
   startedAt: performance.now(),
-  environment: null,
-  probes: {
-    webgpu: null,
-    frame: null,
-    worker: null
-  },
+  environment: buildEnvironment(),
+  fixture: null,
+  cachePresent: false,
+  activeScenario: "idle",
+  run: null,
   logs: []
 };
 
-const knownLimitKeys = [
-  "maxTextureDimension1D",
-  "maxTextureDimension2D",
-  "maxTextureDimension3D",
-  "maxBindGroups",
-  "maxBindingsPerBindGroup",
-  "maxUniformBufferBindingSize",
-  "maxStorageBufferBindingSize",
-  "maxComputeInvocationsPerWorkgroup",
-  "maxComputeWorkgroupStorageSize",
-  "maxBufferSize"
-];
-
 const elements = {
-  metaGrid: document.getElementById("meta-grid"),
   statusRow: document.getElementById("status-row"),
-  statusSummary: document.getElementById("status-summary"),
-  focusList: document.getElementById("focus-list"),
-  nextSteps: document.getElementById("next-steps"),
-  metricsGrid: document.getElementById("metrics-grid"),
-  environmentJson: document.getElementById("environment-json"),
-  resultJson: document.getElementById("result-json"),
-  activityLog: document.getElementById("activity-log"),
-  detectEnvironment: document.getElementById("detect-environment"),
-  runWebgpu: document.getElementById("run-webgpu"),
-  runFrame: document.getElementById("run-frame"),
-  runWorker: document.getElementById("run-worker"),
-  downloadJson: document.getElementById("download-json")
+  summary: document.getElementById("summary"),
+  runCold: document.getElementById("run-cold"),
+  runWarm: document.getElementById("run-warm"),
+  clearCache: document.getElementById("clear-cache"),
+  downloadJson: document.getElementById("download-json"),
+  metricGrid: document.getElementById("metric-grid"),
+  metaGrid: document.getElementById("meta-grid"),
+  logList: document.getElementById("log-list"),
+  resultJson: document.getElementById("result-json")
 };
 
 function round(value, digits = 2) {
-  if (!Number.isFinite(value)) {
-    return null;
-  }
-
+  if (!Number.isFinite(value)) return null;
   const factor = Math.pow(10, digits);
   return Math.round(value * factor) / factor;
 }
 
 function percentile(values, ratio) {
-  if (!values.length) {
-    return null;
-  }
-
-  const sorted = [...values].sort((left, right) => left - right);
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
   const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * ratio) - 1));
   return sorted[index];
 }
 
-function nowIso() {
-  return new Date().toISOString();
+function average(values) {
+  if (!values.length) return null;
+  return values.reduce((total, value) => total + value, 0) / values.length;
 }
 
 function parseBrowser() {
   const ua = navigator.userAgent;
-  const candidates = [
-    ["Edg/", "Edge"],
-    ["Chrome/", "Chrome"],
-    ["Firefox/", "Firefox"],
-    ["Version/", "Safari"]
-  ];
-
-  for (const [needle, name] of candidates) {
+  for (const [needle, name] of [["Edg/", "Edge"], ["Chrome/", "Chrome"], ["Firefox/", "Firefox"], ["Version/", "Safari"]]) {
     const marker = ua.indexOf(needle);
     if (marker >= 0) {
-      const version = ua.slice(marker + needle.length).split(/[\s)/;]/)[0] || "unknown";
-      return { name, version };
+      return { name, version: ua.slice(marker + needle.length).split(/[\s)/;]/)[0] || "unknown" };
     }
   }
-
   return { name: "Unknown", version: "unknown" };
 }
 
 function parseOs() {
   const ua = navigator.userAgent;
-
   if (/Windows NT/i.test(ua)) {
     const match = ua.match(/Windows NT ([0-9.]+)/i);
     return { name: "Windows", version: match ? match[1] : "unknown" };
   }
-
   if (/Mac OS X/i.test(ua)) {
     const match = ua.match(/Mac OS X ([0-9_]+)/i);
     return { name: "macOS", version: match ? match[1].replace(/_/g, ".") : "unknown" };
   }
-
   if (/Android/i.test(ua)) {
     const match = ua.match(/Android ([0-9.]+)/i);
     return { name: "Android", version: match ? match[1] : "unknown" };
   }
-
   if (/(iPhone|iPad|CPU OS)/i.test(ua)) {
     const match = ua.match(/OS ([0-9_]+)/i);
     return { name: "iOS", version: match ? match[1].replace(/_/g, ".") : "unknown" };
   }
-
-  if (/Linux/i.test(ua)) {
-    return { name: "Linux", version: "unknown" };
-  }
-
+  if (/Linux/i.test(ua)) return { name: "Linux", version: "unknown" };
   return { name: "Unknown", version: "unknown" };
 }
 
@@ -131,537 +78,327 @@ function inferDeviceClass() {
   const threads = navigator.hardwareConcurrency || 0;
   const memory = navigator.deviceMemory || 0;
   const mobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-
-  if (mobile) {
-    if (memory >= 6 && threads >= 8) {
-      return "mobile-high";
-    }
-
-    return "mobile-mid";
-  }
-
-  if (memory >= 16 && threads >= 12) {
-    return "desktop-high";
-  }
-
-  if (memory >= 8 && threads >= 8) {
-    return "desktop-mid";
-  }
-
-  if (threads >= 4) {
-    return "laptop";
-  }
-
+  if (mobile) return memory >= 6 && threads >= 8 ? "mobile-high" : "mobile-mid";
+  if (memory >= 16 && threads >= 12) return "desktop-high";
+  if (memory >= 8 && threads >= 8) return "desktop-mid";
+  if (threads >= 4) return "laptop";
   return "unknown";
 }
 
-function baseEnvironment() {
+function buildEnvironment() {
   return {
     browser: parseBrowser(),
     os: parseOs(),
     device: {
       name: navigator.platform || "unknown",
       class: inferDeviceClass(),
-      cpu: navigator.hardwareConcurrency ? String(navigator.hardwareConcurrency) + " threads" : "unknown",
+      cpu: navigator.hardwareConcurrency ? `${navigator.hardwareConcurrency} threads` : "unknown",
       memory_gb: navigator.deviceMemory || undefined,
       power_mode: "unknown"
     },
-    gpu: {
-      adapter: "unknown",
-      required_features: [],
-      limits: {}
-    },
-    backend: "wasm",
-    fallback_triggered: true,
-    worker_mode: "unknown",
+    gpu: { adapter: "not-applicable", required_features: [], limits: {} },
+    backend: "mixed",
+    fallback_triggered: false,
+    worker_mode: "main",
     cache_state: "unknown"
   };
 }
 
-function ensureEnvironment() {
-  if (!state.environment) {
-    state.environment = baseEnvironment();
-  }
-
-  return state.environment;
-}
-
 function log(message) {
-  state.logs.unshift("[" + new Date().toLocaleTimeString() + "] " + message);
-  state.logs = state.logs.slice(0, 14);
+  state.logs.unshift(`[${new Date().toLocaleTimeString()}] ${message}`);
+  state.logs = state.logs.slice(0, 12);
   renderLogs();
 }
 
-function metadataCards() {
-  return [
-    ["Track", metadata.trackLabel],
-    ["Kind", metadata.kindLabel],
-    ["Priority", metadata.priority],
-    ["Workload", metadata.workloadKind],
-    ["Pages URL", metadata.pagesUrl]
-  ];
+function vectorizeText(text, dimension = 64) {
+  const vector = new Float32Array(dimension);
+  for (let index = 0; index < text.length; index += 1) {
+    const code = text.charCodeAt(index);
+    const slot = (code + index * 17) % dimension;
+    vector[slot] += (code % 37) / 37;
+    vector[(slot * 7 + 3) % dimension] += ((code % 13) + 1) / 17;
+  }
+  let norm = 0;
+  for (const value of vector) norm += value * value;
+  norm = Math.sqrt(norm) || 1;
+  return Array.from(vector, (value) => value / norm);
 }
 
-function focusItems() {
-  const common = [
-    "Collect a reproducible browser and device snapshot before adding workload-specific code.",
-    "Use the exported JSON as the first draft for reports/raw once you validate it in the target browser."
-  ];
-
-  switch (metadata.category) {
-    case "template":
-      return common.concat([
-        "Verify the smallest WebGPU success path and copy that shape into downstream repositories.",
-        "Document capability and fallback behavior before adding framework-specific layers."
-      ]);
-    case "benchmark":
-      return common.concat([
-        "Replace lightweight frame and worker probes with workload-specific comparison harnesses.",
-        "Keep input profiles and environment notes identical across runs."
-      ]);
-    case "app":
-      return common.concat([
-        "Check whether the integration surface can acquire GPU resources without blocking the UI.",
-        "Turn this probe into the first user-facing end-to-end demo once the core flow exists."
-      ]);
-    case "graphics":
-    case "blackhole":
-      return common.concat([
-        "Prioritize adapter/device acquisition, frame pacing, and scene-load instrumentation.",
-        "Capture visual correctness notes together with frame timing."
-      ]);
-    default:
-      return common.concat([
-        "Prioritize adapter readiness, worker offload viability, and result export hygiene.",
-        "Replace generic probes with model or runtime-specific metrics as soon as the first harness lands."
-      ]);
-  }
+function cosineSimilarity(left, right) {
+  let dot = 0;
+  for (let index = 0; index < left.length; index += 1) dot += left[index] * right[index];
+  return dot;
 }
 
-function nextSteps() {
-  const steps = [
-    "Save an exported JSON after validating it in the target browser and move it into reports/raw/.",
-    "Replace generic probes in public/app.js with workload-specific setup and KPI collection.",
-    "Update RESULTS.md with the first measured run and record fallback conditions explicitly."
-  ];
-
-  if (metadata.category === "template") {
-    steps.unshift("Promote the minimal setup path into a copyable starter template for downstream repos.");
-  }
-
-  if (metadata.category === "benchmark") {
-    steps.unshift("Define the comparison matrix and freeze one shared input profile before collecting numbers.");
-  }
-
-  if (metadata.category === "app") {
-    steps.unshift("Connect one real user flow and treat this probe as the readiness gate before adding polish.");
-  }
-
-  return steps;
+async function loadFixture() {
+  if (state.fixture) return state.fixture;
+  const response = await fetch("./docs-fixture.json", { cache: "no-store" });
+  state.fixture = await response.json();
+  return state.fixture;
 }
 
-function renderList(element, items) {
-  element.innerHTML = "";
-  for (const item of items) {
-    const li = document.createElement("li");
-    li.textContent = item;
-    element.appendChild(li);
-  }
+function readCachedIndex() {
+  const raw = localStorage.getItem(CACHE_KEY);
+  if (!raw) return null;
+  return JSON.parse(raw);
 }
 
-function renderMeta() {
-  elements.metaGrid.innerHTML = "";
+function writeCachedIndex(payload) {
+  localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
+}
 
-  for (const [label, value] of metadataCards()) {
-    const card = document.createElement("article");
-    card.className = "meta-card";
+function clearCachedIndex() {
+  localStorage.removeItem(CACHE_KEY);
+  state.cachePresent = false;
+}
 
-    const labelNode = document.createElement("span");
-    labelNode.className = "label";
-    labelNode.textContent = label;
+async function buildIndex(documents) {
+  const batchSize = 3;
+  const perDocMs = [];
+  const entries = [];
+  const startedAt = performance.now();
 
-    const valueNode = document.createElement(label === "Pages URL" ? "a" : "div");
-    valueNode.className = "value";
-    if (label === "Pages URL") {
-      valueNode.href = value;
-      valueNode.className = "value link";
+  for (let start = 0; start < documents.length; start += batchSize) {
+    const batch = documents.slice(start, start + batchSize);
+    for (const doc of batch) {
+      const docStartedAt = performance.now();
+      const vector = vectorizeText(`${doc.title} ${doc.text}`);
+      perDocMs.push(performance.now() - docStartedAt);
+      entries.push({ id: doc.id, title: doc.title, vector });
     }
-    valueNode.textContent = value;
-
-    card.appendChild(labelNode);
-    card.appendChild(valueNode);
-    elements.metaGrid.appendChild(card);
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
+
+  return {
+    entries,
+    batchSize,
+    perDocMs,
+    indexBuildMs: performance.now() - startedAt
+  };
 }
 
-function summarizeStatus() {
-  if (!state.environment) {
-    return "Environment detection has not run yet.";
+function runQueries(indexEntries, queries) {
+  const queryDurations = [];
+  let hits = 0;
+
+  for (const query of queries) {
+    const queryStartedAt = performance.now();
+    const vector = vectorizeText(query.text);
+    const ranked = indexEntries
+      .map((entry) => ({ id: entry.id, score: cosineSimilarity(vector, entry.vector) }))
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 10);
+    queryDurations.push(performance.now() - queryStartedAt);
+    if (ranked.some((entry) => entry.id === query.expectedId)) hits += 1;
   }
 
-  if (!state.probes.webgpu) {
-    return "Environment captured. Run the WebGPU probe to see whether the repository can stay on the GPU path.";
+  return {
+    queryDurations,
+    recallAt10: queries.length ? hits / queries.length : 0
+  };
+}
+
+async function runScenario(mode) {
+  if (state.activeScenario !== "idle") return;
+  const fixture = await loadFixture();
+  state.activeScenario = mode;
+  state.environment.cache_state = mode;
+  render();
+
+  if (mode === "cold") clearCachedIndex();
+
+  const cached = readCachedIndex();
+  let indexPayload = cached;
+  let indexBuildMs = 0;
+  let perDocMs = [];
+
+  if (!cached || mode === "cold") {
+    log(`${mode} run: building synthetic embedding index.`);
+    const built = await buildIndex(fixture.documents);
+    indexPayload = { createdAt: new Date().toISOString(), entries: built.entries, batchSize: built.batchSize };
+    writeCachedIndex(indexPayload);
+    state.cachePresent = true;
+    indexBuildMs = built.indexBuildMs;
+    perDocMs = built.perDocMs;
+  } else {
+    state.cachePresent = true;
+    log("Warm run: reusing cached embedding index.");
+    perDocMs = fixture.documents.map(() => 0);
   }
 
-  if (!state.probes.webgpu.available) {
-    return "Environment captured, but WebGPU is not available. The exported JSON records a fallback path so you can keep the run reproducible.";
-  }
+  const queryStats = runQueries(indexPayload.entries, fixture.queries);
+  const totalMs = indexBuildMs + queryStats.queryDurations.reduce((sum, value) => sum + value, 0);
+  const run = {
+    scenario: mode,
+    batchSize: indexPayload.batchSize || 3,
+    documentCount: fixture.documents.length,
+    queryCount: fixture.queries.length,
+    indexBuildMs,
+    perDocMs,
+    queryDurations: queryStats.queryDurations,
+    totalMs,
+    docsPerSec: fixture.documents.length / Math.max(indexBuildMs / 1000, 0.001),
+    queriesPerSec: fixture.queries.length / Math.max(queryStats.queryDurations.reduce((sum, value) => sum + value, 0) / 1000, 0.001),
+    recallAt10: queryStats.recallAt10
+  };
 
-  if (!state.probes.frame || !state.probes.worker) {
-    return "WebGPU is available. Run the frame and worker probes next to capture baseline responsiveness metrics.";
-  }
+  state.run = run;
+  state.activeScenario = "idle";
+  log(`${mode} run complete: docs/s=${round(run.docsPerSec, 2)}, queries/s=${round(run.queriesPerSec, 2)}, recall@10=${round(run.recallAt10, 2)}.`);
+  render();
+}
 
-  return "Environment, WebGPU, frame pacing, and worker round-trip probes are complete. Promote this JSON into reports/raw after validating it against the intended workload.";
+function buildResult() {
+  const run = state.run;
+  return {
+    meta: {
+      repo: "exp-embeddings-browser-throughput",
+      commit: "bootstrap-generated",
+      timestamp: new Date().toISOString(),
+      owner: "ai-webgpu-lab",
+      track: "ml",
+      scenario: run ? `synthetic-embeddings-${run.scenario}` : "synthetic-embeddings-pending",
+      notes: run
+        ? `synthetic fixture; batchSize=${run.batchSize}; docs=${run.documentCount}; queries=${run.queryCount}; cacheState=${run.scenario}`
+        : "Run cold and warm synthetic embedding harness."
+    },
+    environment: state.environment,
+    workload: {
+      kind: "embeddings",
+      name: "synthetic-embedding-throughput",
+      input_profile: state.fixture ? `${state.fixture.documents.length}-docs-${state.fixture.queries.length}-queries` : "fixture-pending",
+      model_id: "synthetic-browser-embedder-v1",
+      dataset: "docs-fixture-v1"
+    },
+    metrics: {
+      common: {
+        time_to_interactive_ms: round(performance.now() - state.startedAt, 2) || 0,
+        init_ms: run ? round(run.indexBuildMs, 2) || 0 : 0,
+        success_rate: run ? 1 : 0.5,
+        peak_memory_note: navigator.deviceMemory ? `${navigator.deviceMemory} GB reported by browser` : "deviceMemory unavailable",
+        error_type: ""
+      },
+      embeddings: {
+        docs_per_sec: run ? round(run.docsPerSec, 2) || 0 : 0,
+        queries_per_sec: run ? round(run.queriesPerSec, 2) || 0 : 0,
+        p50_ms: run ? round(percentile(run.perDocMs.filter((value) => value > 0), 0.5) || 0, 2) || 0 : 0,
+        p95_ms: run ? round(percentile(run.perDocMs.filter((value) => value > 0), 0.95) || 0, 2) || 0 : 0,
+        recall_at_10: run ? round(run.recallAt10, 2) || 0 : 0,
+        index_build_ms: run ? round(run.indexBuildMs, 2) || 0 : 0
+      }
+    },
+    status: run ? "success" : "partial",
+    artifacts: {
+      raw_logs: state.logs.slice(0, 5),
+      deploy_url: "https://ai-webgpu-lab.github.io/exp-embeddings-browser-throughput/"
+    }
+  };
 }
 
 function renderStatus() {
   const badges = [];
-
-  badges.push({
-    tone: state.environment ? "success" : "warn",
-    text: state.environment ? "Environment ready" : "Environment pending"
-  });
-
-  if (!state.probes.webgpu) {
-    badges.push({ tone: "warn", text: "WebGPU probe pending" });
-  } else if (state.probes.webgpu.available) {
-    badges.push({ tone: "success", text: "WebGPU available" });
+  if (state.activeScenario !== "idle") {
+    badges.push({ text: `${state.activeScenario} running` });
+    badges.push({ text: "Indexing in progress" });
+  } else if (state.run) {
+    badges.push({ text: `${state.run.scenario} complete` });
+    badges.push({ text: state.cachePresent ? "Cache present" : "Cache empty" });
   } else {
-    badges.push({ tone: "danger", text: "WebGPU unavailable" });
+    badges.push({ text: "Fixture ready" });
+    badges.push({ text: state.cachePresent ? "Cache present" : "Cache empty" });
   }
-
-  badges.push({
-    tone: state.probes.frame ? "success" : "warn",
-    text: state.probes.frame ? "Frame probe done" : "Frame probe pending"
-  });
-  badges.push({
-    tone: state.probes.worker ? "success" : "warn",
-    text: state.probes.worker ? "Worker probe done" : "Worker probe pending"
-  });
 
   elements.statusRow.innerHTML = "";
   for (const badge of badges) {
     const node = document.createElement("span");
-    node.className = "badge " + badge.tone;
+    node.className = "badge";
     node.textContent = badge.text;
     elements.statusRow.appendChild(node);
   }
-
-  elements.statusSummary.textContent = summarizeStatus();
-}
-
-function metricCards() {
-  const cards = [];
-  cards.push(["TTI", round(performance.now() - state.startedAt, 1) ? round(performance.now() - state.startedAt, 1) + " ms" : "pending"]);
-
-  if (state.probes.webgpu) {
-    cards.push(["WebGPU Init", state.probes.webgpu.initMs ? round(state.probes.webgpu.initMs, 1) + " ms" : state.probes.webgpu.available ? "ready" : "fallback"]);
-  } else {
-    cards.push(["WebGPU Init", "pending"]);
-  }
-
-  if (state.probes.frame) {
-    cards.push(["Avg FPS", round(state.probes.frame.avgFps, 1) + " fps"]);
-    cards.push(["P95 Frame", round(state.probes.frame.p95FrameMs, 2) + " ms"]);
-  } else {
-    cards.push(["Avg FPS", "pending"]);
-    cards.push(["P95 Frame", "pending"]);
-  }
-
-  if (state.probes.worker) {
-    cards.push(["Worker RTT", round(state.probes.worker.avgRttMs, 2) + " ms"]);
-    cards.push(["Worker P95", round(state.probes.worker.p95RttMs, 2) + " ms"]);
-  } else {
-    cards.push(["Worker RTT", "pending"]);
-    cards.push(["Worker P95", "pending"]);
-  }
-
-  return cards;
+  elements.summary.textContent = state.run
+    ? `Last run ${state.run.scenario}: ${round(state.run.docsPerSec, 2)} docs/s, ${round(state.run.queriesPerSec, 2)} queries/s, recall@10 ${round(state.run.recallAt10, 2)}.`
+    : "Run cold first to build and persist the document index, then run warm to measure reuse against the same fixture.";
 }
 
 function renderMetrics() {
-  elements.metricsGrid.innerHTML = "";
-
-  for (const [label, value] of metricCards()) {
+  const run = state.run;
+  const cards = [
+    ["Scenario", run ? run.scenario : "pending"],
+    ["Docs/s", run ? `${round(run.docsPerSec, 2)}` : "pending"],
+    ["Queries/s", run ? `${round(run.queriesPerSec, 2)}` : "pending"],
+    ["Index Build", run ? `${round(run.indexBuildMs, 2)} ms` : "pending"],
+    ["Recall@10", run ? `${round(run.recallAt10, 2)}` : "pending"],
+    ["Doc P95", run ? `${round(percentile(run.perDocMs.filter((value) => value > 0), 0.95) || 0, 2)} ms` : "pending"]
+  ];
+  elements.metricGrid.innerHTML = "";
+  for (const [label, value] of cards) {
     const card = document.createElement("article");
-    card.className = "metric-card";
+    card.className = "card";
+    card.innerHTML = `<span class="label">${label}</span><div class="value">${value}</div>`;
+    elements.metricGrid.appendChild(card);
+  }
+}
 
-    const labelNode = document.createElement("span");
-    labelNode.className = "label";
-    labelNode.textContent = label;
-
-    const valueNode = document.createElement("div");
-    valueNode.className = "value";
-    valueNode.textContent = value;
-
-    card.appendChild(labelNode);
-    card.appendChild(valueNode);
-    elements.metricsGrid.appendChild(card);
+function renderEnvironment() {
+  const info = [
+    ["Browser", `${state.environment.browser.name} ${state.environment.browser.version}`],
+    ["OS", `${state.environment.os.name} ${state.environment.os.version}`],
+    ["Device", state.environment.device.class],
+    ["CPU", state.environment.device.cpu],
+    ["Memory", state.environment.device.memory_gb ? `${state.environment.device.memory_gb} GB` : "unknown"],
+    ["Backend", state.environment.backend],
+    ["Cache State", state.environment.cache_state]
+  ];
+  elements.metaGrid.innerHTML = "";
+  for (const [label, value] of info) {
+    const card = document.createElement("article");
+    card.className = "card";
+    card.innerHTML = `<span class="label">${label}</span><div class="value">${value}</div>`;
+    elements.metaGrid.appendChild(card);
   }
 }
 
 function renderLogs() {
-  elements.activityLog.innerHTML = "";
-
-  if (!state.logs.length) {
+  elements.logList.innerHTML = "";
+  const entries = state.logs.length ? state.logs : ["No embedding activity yet."];
+  for (const entry of entries) {
     const li = document.createElement("li");
-    li.textContent = "No probe activity yet.";
-    elements.activityLog.appendChild(li);
-    return;
+    li.textContent = entry;
+    elements.logList.appendChild(li);
   }
-
-  for (const item of state.logs) {
-    const li = document.createElement("li");
-    li.textContent = item;
-    elements.activityLog.appendChild(li);
-  }
-}
-
-function schemaResult() {
-  const environment = ensureEnvironment();
-  const webgpu = state.probes.webgpu;
-
-  if (webgpu) {
-    environment.backend = webgpu.available ? "webgpu" : "wasm";
-    environment.fallback_triggered = !webgpu.available;
-    environment.gpu = {
-      adapter: webgpu.adapter || "unknown",
-      required_features: webgpu.features || [],
-      limits: webgpu.limits || {}
-    };
-  }
-
-  environment.worker_mode = state.probes.worker ? "worker" : "main";
-
-  const initMs = webgpu && webgpu.initMs ? round(webgpu.initMs, 2) : round(performance.now() - state.startedAt, 2);
-  const successRate = webgpu ? (webgpu.available ? 1 : 0) : 0.5;
-  const errorType = webgpu && webgpu.error ? webgpu.error : "";
-
-  return {
-    meta: {
-      repo: metadata.repo,
-      commit: "bootstrap-generated",
-      timestamp: nowIso(),
-      owner: "ai-webgpu-lab",
-      track: metadata.trackSlug,
-      scenario: "baseline-probe",
-      notes: metadata.purpose + ". Replace generic probes with workload-specific logic before treating this as a final benchmark."
-    },
-    environment,
-    workload: {
-      kind: metadata.workloadKind,
-      name: metadata.repo + " baseline probe",
-      input_profile: "bootstrap-default"
-    },
-    metrics: {
-      common: {
-        time_to_interactive_ms: round(performance.now() - state.startedAt, 2),
-        init_ms: initMs,
-        success_rate: successRate,
-        peak_memory_note: navigator.deviceMemory ? String(navigator.deviceMemory) + " GB reported by browser" : "deviceMemory unavailable",
-        error_type: errorType
-      }
-    },
-    status: webgpu ? (webgpu.available ? "success" : "partial") : "partial",
-    artifacts: {
-      deploy_url: metadata.pagesUrl
-    }
-  };
-}
-
-function renderJson() {
-  const environment = state.environment || baseEnvironment();
-  elements.environmentJson.textContent = JSON.stringify(environment, null, 2);
-  elements.resultJson.textContent = JSON.stringify(schemaResult(), null, 2);
-}
-
-async function detectEnvironment() {
-  ensureEnvironment();
-  log("Captured base environment snapshot.");
-  render();
-}
-
-function extractLimits(source) {
-  const limits = {};
-
-  if (!source) {
-    return limits;
-  }
-
-  for (const key of knownLimitKeys) {
-    if (key in source && Number.isFinite(source[key])) {
-      limits[key] = Number(source[key]);
-    }
-  }
-
-  return limits;
-}
-
-async function runWebgpuProbe() {
-  ensureEnvironment();
-  const startedAt = performance.now();
-
-  if (!("gpu" in navigator)) {
-    state.probes.webgpu = {
-      available: false,
-      initMs: performance.now() - startedAt,
-      error: "navigator.gpu unavailable",
-      adapter: "unavailable",
-      features: [],
-      limits: {}
-    };
-    log("WebGPU probe failed: navigator.gpu is not available in this browser.");
-    render();
-    return;
-  }
-
-  try {
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) {
-      throw new Error("No GPU adapter returned");
-    }
-
-    let adapterInfo = null;
-    if (typeof adapter.requestAdapterInfo === "function") {
-      try {
-        adapterInfo = await adapter.requestAdapterInfo();
-      } catch (error) {
-        adapterInfo = null;
-      }
-    }
-
-    const device = await adapter.requestDevice();
-    const adapterName = (adapterInfo && (adapterInfo.description || adapterInfo.vendor || adapterInfo.architecture)) || "WebGPU adapter";
-    const features = Array.from(device.features || []);
-    const limits = extractLimits(device.limits || adapter.limits);
-
-    state.probes.webgpu = {
-      available: true,
-      initMs: performance.now() - startedAt,
-      adapter: adapterName,
-      features,
-      limits
-    };
-    log("WebGPU probe succeeded with adapter: " + adapterName + ".");
-  } catch (error) {
-    state.probes.webgpu = {
-      available: false,
-      initMs: performance.now() - startedAt,
-      error: error instanceof Error ? error.message : String(error),
-      adapter: "unavailable",
-      features: [],
-      limits: {}
-    };
-    log("WebGPU probe failed: " + state.probes.webgpu.error + ".");
-  }
-
-  render();
-}
-
-async function runFrameProbe() {
-  ensureEnvironment();
-  const deltas = [];
-
-  await new Promise((resolve) => {
-    let previous = 0;
-    function step(timestamp) {
-      if (previous !== 0) {
-        deltas.push(timestamp - previous);
-      }
-      previous = timestamp;
-
-      if (deltas.length >= 120) {
-        resolve();
-        return;
-      }
-
-      requestAnimationFrame(step);
-    }
-
-    requestAnimationFrame(step);
-  });
-
-  const avgDelta = deltas.reduce((total, value) => total + value, 0) / deltas.length;
-  state.probes.frame = {
-    avgFrameMs: avgDelta,
-    avgFps: avgDelta > 0 ? 1000 / avgDelta : 0,
-    p95FrameMs: percentile(deltas, 0.95)
-  };
-  log("Frame probe captured " + deltas.length + " frames.");
-  render();
-}
-
-async function runWorkerProbe() {
-  ensureEnvironment();
-  const workerScript = "self.onmessage = (event) => { if (event.data === 'ping') { self.postMessage(performance.now()); } };";
-  const workerUrl = URL.createObjectURL(new Blob([workerScript], { type: "text/javascript" }));
-  const probeWorker = new Worker(workerUrl);
-  const roundTrips = [];
-
-  try {
-    for (let index = 0; index < 20; index += 1) {
-      const sample = await new Promise((resolve, reject) => {
-        const startedAt = performance.now();
-        const timeout = setTimeout(() => reject(new Error("Worker probe timed out")), 2000);
-
-        probeWorker.onmessage = () => {
-          clearTimeout(timeout);
-          resolve(performance.now() - startedAt);
-        };
-
-        probeWorker.postMessage("ping");
-      });
-      roundTrips.push(sample);
-    }
-
-    const avgRtt = roundTrips.reduce((total, value) => total + value, 0) / roundTrips.length;
-    state.probes.worker = {
-      avgRttMs: avgRtt,
-      p95RttMs: percentile(roundTrips, 0.95)
-    };
-    log("Worker probe completed with " + roundTrips.length + " round-trips.");
-  } catch (error) {
-    state.probes.worker = {
-      avgRttMs: null,
-      p95RttMs: null,
-      error: error instanceof Error ? error.message : String(error)
-    };
-    log("Worker probe failed: " + state.probes.worker.error + ".");
-  } finally {
-    probeWorker.terminate();
-    URL.revokeObjectURL(workerUrl);
-  }
-
-  render();
-}
-
-function downloadJson() {
-  const payload = JSON.stringify(schemaResult(), null, 2);
-  const blob = new Blob([payload], { type: "application/json" });
-  const objectUrl = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = objectUrl;
-  anchor.download = metadata.repo + "-baseline-probe.json";
-  anchor.click();
-  URL.revokeObjectURL(objectUrl);
-  log("Downloaded schema-aligned baseline JSON draft.");
 }
 
 function render() {
-  renderMeta();
   renderStatus();
   renderMetrics();
-  renderJson();
+  renderEnvironment();
+  renderLogs();
+  elements.resultJson.textContent = JSON.stringify(buildResult(), null, 2);
 }
 
-elements.detectEnvironment.addEventListener("click", detectEnvironment);
-elements.runWebgpu.addEventListener("click", runWebgpuProbe);
-elements.runFrame.addEventListener("click", runFrameProbe);
-elements.runWorker.addEventListener("click", runWorkerProbe);
+function downloadJson() {
+  const blob = new Blob([JSON.stringify(buildResult(), null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `exp-embeddings-browser-throughput-${state.run ? state.run.scenario : "pending"}.json`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+  log("Downloaded embeddings throughput JSON draft.");
+}
+
+elements.runCold.addEventListener("click", () => runScenario("cold"));
+elements.runWarm.addEventListener("click", () => runScenario("warm"));
+elements.clearCache.addEventListener("click", () => {
+  clearCachedIndex();
+  log("Cleared cached embedding index.");
+  render();
+});
 elements.downloadJson.addEventListener("click", downloadJson);
 
-renderList(elements.focusList, focusItems());
-renderList(elements.nextSteps, nextSteps());
-log("Baseline probe ready. Capture environment first, then run WebGPU, frame, and worker probes.");
-detectEnvironment();
-render();
+(async function init() {
+  await loadFixture();
+  state.cachePresent = Boolean(readCachedIndex());
+  log("Embeddings throughput harness ready.");
+  render();
+})();
