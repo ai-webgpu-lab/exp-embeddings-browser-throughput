@@ -1,18 +1,34 @@
+repo=exp-embeddings-browser-throughput
+scenario=Warm Query / Fallback
+url_search=?mode=fallback
+captured_at=2026-04-22T07:23:20.606Z
+browser=Chromium 147.0.7727.15
+headless=true
+meta_scenario=synthetic-embeddings-warm-fallback
+status=success
+
+[page-console]
+(none)
+
+[harness-logs]
+./reports/logs/04-warm-query-fallback.log
+
+[result-json]
 {
   "meta": {
     "repo": "exp-embeddings-browser-throughput",
-    "commit": "c4319b0",
-    "timestamp": "2026-04-22T06:13:00.084Z",
+    "commit": "07ce4fa",
+    "timestamp": "2026-04-22T07:23:20.410Z",
     "owner": "ai-webgpu-lab",
     "track": "ml",
-    "scenario": "synthetic-embeddings-cold",
-    "notes": "synthetic fixture; batchSize=3; docs=6; queries=3; cacheState=cold; automation=playwright-chromium",
+    "scenario": "synthetic-embeddings-warm-fallback",
+    "notes": "synthetic fixture; batchSize=3; docs=6; queries=3; cacheState=warm; executionMode=fallback; backend=wasm; automation=playwright-chromium",
     "capture_context": {
       "tool": "playwright-chromium",
       "browser_name": "Chromium",
       "browser_version": "147.0.7727.15",
       "headless": true,
-      "captured_at": "2026-04-22T06:13:00.212Z",
+      "captured_at": "2026-04-22T07:23:20.606Z",
       "captured_by": "zzragida"
     }
   },
@@ -33,14 +49,14 @@
       "power_mode": "unknown"
     },
     "gpu": {
-      "adapter": "not-applicable",
+      "adapter": "wasm-fallback-simulated",
       "required_features": [],
       "limits": {}
     },
-    "backend": "mixed",
-    "fallback_triggered": false,
+    "backend": "wasm",
+    "fallback_triggered": true,
     "worker_mode": "main",
-    "cache_state": "cold"
+    "cache_state": "warm"
   },
   "workload": {
     "kind": "embeddings",
@@ -51,29 +67,29 @@
   },
   "metrics": {
     "common": {
-      "time_to_interactive_ms": 96.4,
-      "init_ms": 8.9,
+      "time_to_interactive_ms": 92.3,
+      "init_ms": 0,
       "success_rate": 1,
       "peak_memory_note": "16 GB reported by browser",
       "error_type": ""
     },
     "embeddings": {
-      "docs_per_sec": 674.16,
-      "queries_per_sec": 3000,
-      "p50_ms": 0.1,
-      "p95_ms": 0.3,
+      "docs_per_sec": 6000,
+      "queries_per_sec": 133.93,
+      "p50_ms": 0,
+      "p95_ms": 0,
       "recall_at_10": 1,
-      "index_build_ms": 8.9
+      "index_build_ms": 0
     }
   },
   "status": "success",
   "artifacts": {
     "raw_logs": [
-      "./reports/logs/01-cold-index.log"
+      "./reports/logs/04-warm-query-fallback.log"
     ],
     "deploy_url": "https://ai-webgpu-lab.github.io/exp-embeddings-browser-throughput/",
     "screenshots": [
-      "./reports/screenshots/01-cold-index.png"
+      "./reports/screenshots/04-warm-query-fallback.png"
     ]
   }
 }

@@ -1,18 +1,34 @@
+repo=exp-embeddings-browser-throughput
+scenario=Warm Query / WebGPU
+url_search=?mode=webgpu
+captured_at=2026-04-22T07:23:18.515Z
+browser=Chromium 147.0.7727.15
+headless=true
+meta_scenario=synthetic-embeddings-warm-webgpu
+status=success
+
+[page-console]
+(none)
+
+[harness-logs]
+./reports/logs/02-warm-query-webgpu.log
+
+[result-json]
 {
   "meta": {
     "repo": "exp-embeddings-browser-throughput",
-    "commit": "c4319b0",
-    "timestamp": "2026-04-22T06:13:00.487Z",
+    "commit": "07ce4fa",
+    "timestamp": "2026-04-22T07:23:18.312Z",
     "owner": "ai-webgpu-lab",
     "track": "ml",
-    "scenario": "synthetic-embeddings-warm",
-    "notes": "synthetic fixture; batchSize=3; docs=6; queries=3; cacheState=warm; automation=playwright-chromium",
+    "scenario": "synthetic-embeddings-warm-webgpu",
+    "notes": "synthetic fixture; batchSize=3; docs=6; queries=3; cacheState=warm; executionMode=webgpu; backend=webgpu; automation=playwright-chromium",
     "capture_context": {
       "tool": "playwright-chromium",
       "browser_name": "Chromium",
       "browser_version": "147.0.7727.15",
       "headless": true,
-      "captured_at": "2026-04-22T06:13:00.599Z",
+      "captured_at": "2026-04-22T07:23:18.515Z",
       "captured_by": "zzragida"
     }
   },
@@ -33,11 +49,13 @@
       "power_mode": "unknown"
     },
     "gpu": {
-      "adapter": "not-applicable",
-      "required_features": [],
+      "adapter": "synthetic-webgpu-profile",
+      "required_features": [
+        "shader-f16"
+      ],
       "limits": {}
     },
-    "backend": "mixed",
+    "backend": "webgpu",
     "fallback_triggered": false,
     "worker_mode": "main",
     "cache_state": "warm"
@@ -51,7 +69,7 @@
   },
   "metrics": {
     "common": {
-      "time_to_interactive_ms": 499,
+      "time_to_interactive_ms": 89.3,
       "init_ms": 0,
       "success_rate": 1,
       "peak_memory_note": "16 GB reported by browser",
@@ -59,7 +77,7 @@
     },
     "embeddings": {
       "docs_per_sec": 6000,
-      "queries_per_sec": 3000,
+      "queries_per_sec": 206.9,
       "p50_ms": 0,
       "p95_ms": 0,
       "recall_at_10": 1,
@@ -69,11 +87,11 @@
   "status": "success",
   "artifacts": {
     "raw_logs": [
-      "./reports/logs/02-warm-query.log"
+      "./reports/logs/02-warm-query-webgpu.log"
     ],
     "deploy_url": "https://ai-webgpu-lab.github.io/exp-embeddings-browser-throughput/",
     "screenshots": [
-      "./reports/screenshots/02-warm-query.png"
+      "./reports/screenshots/02-warm-query-webgpu.png"
     ]
   }
 }
