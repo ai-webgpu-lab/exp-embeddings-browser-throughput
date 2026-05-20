@@ -1,8 +1,8 @@
 {
   "meta": {
     "repo": "exp-embeddings-browser-throughput",
-    "commit": "07ce4fa",
-    "timestamp": "2026-04-22T07:23:18.312Z",
+    "commit": "efe9b12",
+    "timestamp": "2026-05-20T15:41:28.060Z",
     "owner": "ai-webgpu-lab",
     "track": "ml",
     "scenario": "synthetic-embeddings-warm-webgpu",
@@ -12,9 +12,11 @@
       "browser_name": "Chromium",
       "browser_version": "147.0.7727.15",
       "headless": true,
-      "captured_at": "2026-04-22T07:23:18.515Z",
-      "captured_by": "zzragida"
-    }
+      "captured_at": "2026-05-20T15:41:28.255Z",
+      "captured_by": "codex"
+    },
+    "capture_scenario_id": "02-warm-query-webgpu",
+    "capture_url_search": "?mode=webgpu"
   },
   "environment": {
     "browser": {
@@ -29,7 +31,7 @@
       "name": "Linux x86_64",
       "class": "desktop-high",
       "cpu": "16 threads",
-      "memory_gb": 16,
+      "memory_gb": 32,
       "power_mode": "unknown"
     },
     "gpu": {
@@ -53,15 +55,15 @@
   },
   "metrics": {
     "common": {
-      "time_to_interactive_ms": 89.3,
+      "time_to_interactive_ms": 80.1,
       "init_ms": 0,
       "success_rate": 1,
-      "peak_memory_note": "16 GB reported by browser",
+      "peak_memory_note": "32 GB reported by browser",
       "error_type": ""
     },
     "embeddings": {
       "docs_per_sec": 6000,
-      "queries_per_sec": 206.9,
+      "queries_per_sec": 155.44,
       "p50_ms": 0,
       "p95_ms": 0,
       "recall_at_10": 1,

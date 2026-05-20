@@ -2,8 +2,8 @@
 
 ## 1. 실험 요약
 - 저장소: exp-embeddings-browser-throughput
-- 커밋 해시: 07ce4fa
-- 실험 일시: 2026-04-22T07:23:16.757Z -> 2026-04-22T07:23:20.410Z
+- 커밋 해시: efe9b12
+- 실험 일시: 2026-05-20T15:41:26.692Z -> 2026-05-20T15:41:29.637Z
 - 담당자: ai-webgpu-lab
 - 실험 유형: `ml`
 - 상태: `success`
@@ -26,7 +26,7 @@
 - 장치명: Linux x86_64
 - device class: `desktop-high`
 - CPU: 16 threads
-- 메모리: 16 GB
+- 메모리: 32 GB
 - 전원 상태: `unknown`
 
 ### GPU / 실행 모드
@@ -51,38 +51,38 @@
 
 ## 5. 측정 지표
 ### 공통
-- time_to_interactive_ms: 89.3 ~ 195 ms
-- init_ms: 0 ~ 80.5 ms
+- time_to_interactive_ms: 79.1 ~ 174.4 ms
+- init_ms: 0 ~ 78.6 ms
 - success_rate: 1
-- peak_memory_note: 16 GB reported by browser
+- peak_memory_note: 32 GB reported by browser
 - error_type: -
 
 ### Embeddings / ML
-- docs_per_sec: 74.53 ~ 6000
-- queries_per_sec: 133.33 ~ 227.27
-- p95_ms: 0 ~ 17.5 ms
+- docs_per_sec: 76.34 ~ 6000
+- queries_per_sec: 121.46 ~ 232.56
+- p95_ms: 0 ~ 13.1 ms
 - recall_at_10: 1
-- index_build_ms: 0 ~ 80.5 ms
+- index_build_ms: 0 ~ 78.6 ms
 - backends: webgpu, wasm
 - fallback states: false, true
 
 ## 6. 결과 표
 | Run | Scenario | Backend | Cache | Mean | P95 | Notes |
 |---|---|---:|---:|---:|---:|---|
-| 1 | Cold Index / WebGPU | webgpu | cold | 139.21 | 17.5 | queries/s=227.27, recall@10=1, metric=docs/s |
-| 2 | Warm Query / WebGPU | webgpu | warm | 6000 | 0 | queries/s=206.9, recall@10=1, metric=docs/s |
-| 3 | Cold Index / Fallback | wasm | cold | 74.53 | 13 | queries/s=133.33, recall@10=1, metric=docs/s |
-| 4 | Warm Query / Fallback | wasm | warm | 6000 | 0 | queries/s=133.93, recall@10=1, metric=docs/s |
+| 1 | Cold Index / WebGPU | webgpu | cold | 171.92 | 9.9 | queries/s=232.56, recall/top-k=1, metric=docs/s |
+| 2 | Warm Query / WebGPU | webgpu | warm | 6000 | 0 | queries/s=155.44, recall/top-k=1, metric=docs/s |
+| 3 | Cold Index / Fallback | wasm | cold | 76.34 | 13.1 | queries/s=135.75, recall/top-k=1, metric=docs/s |
+| 4 | Warm Query / Fallback | wasm | warm | 6000 | 0 | queries/s=121.46, recall/top-k=1, metric=docs/s |
 
 ## 7. 관찰
-- warm run docs_per_sec는 6000이고 cold 대비 delta는 5860.79였다.
+- warm run docs_per_sec는 6000이고 cold 대비 delta는 5828.08였다.
 - recall@10은 cold=1, warm=1로 유지됐다.
 - playwright-chromium로 수집된 automation baseline이며 headless=true, browser=Chromium 147.0.7727.15.
 - 실제 runtime/model/renderer 교체 전 deterministic harness 결과이므로, 절대 성능보다 보고 경로와 재현성 확인에 우선 의미가 있다.
 
 ## 8. WebGPU vs Fallback
-- cold cache: docs/s webgpu=139.21, fallback=74.53, delta=+64.68; queries/s delta=+93.94; recall delta=0
-- warm cache: docs/s webgpu=6000, fallback=6000, delta=0; queries/s delta=+72.97; recall delta=0
+- cold cache: docs/s webgpu=171.92, fallback=76.34, delta=+95.58; queries/s delta=+96.81; recall delta=0
+- warm cache: docs/s webgpu=6000, fallback=6000, delta=0; queries/s delta=+33.98; recall delta=0
 
 ## 9. 결론
 - cold/warm embeddings baseline 결과와 문서화 경로가 처음으로 연결됐다.
